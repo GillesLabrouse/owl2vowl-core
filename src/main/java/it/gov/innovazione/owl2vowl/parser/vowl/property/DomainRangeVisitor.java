@@ -33,7 +33,18 @@ public class DomainRangeVisitor implements OWLObjectVisitorEx<AbstractNode> {
 	@Override
 	public AbstractNode doDefault(@Nonnull Object object) {
 		logger.info("Missed object for domain/range: " + object);
-		return (AbstractNode) object;
+		return new NullClass();
+	}
+
+	@Override
+	public AbstractNode visit(OWLClass ce) {
+		if (ce.isOWLThing()) {
+			return vowlData.getGenerator().generateThing();
+		}
+		if (ce.isOWLNothing()) {
+			return new NullClass();
+		}
+		return vowlData.getClassForIri(ce.getIRI());
 	}
 
 	@Nonnull
@@ -43,15 +54,21 @@ public class DomainRangeVisitor implements OWLObjectVisitorEx<AbstractNode> {
 		Set<IRI> iriList = new HashSet<>();
 
 		for (OWLClassExpression operand : operands) {
-			if (operand.isAnonymous()) {
-				logger.info("Anonymous operand in intersections");
+			if (operand.isOWLThing()) {
+				continue;
+			}
+			AbstractNode node = operand.accept(this);
+			if (node instanceof NullClass) {
 				return new NullClass();
 			}
-			iriList.add(operand.asOWLClass().getIRI());
+			iriList.add(node.getIri());
 		}
 
 		if (iriList.contains(VowlThing.GENERIC_THING_IRI)) {
 			iriList.remove(VowlThing.GENERIC_THING_IRI);
+		}
+		if (iriList.isEmpty()) {
+			return vowlData.getGenerator().generateThing();
 		}
 
 		VowlClass intersection = vowlData.getSearcher().getIntersection(iriList);
@@ -75,12 +92,14 @@ public class DomainRangeVisitor implements OWLObjectVisitorEx<AbstractNode> {
 		Set<IRI> iriList = new HashSet<>();
 
 		for (OWLClassExpression operand : operands) {
-			if (operand.isAnonymous()) {
-				logger.info("Anonymous operand in intersections");
+			if (operand.isOWLThing()) {
+				return vowlData.getGenerator().generateThing();
+			}
+			AbstractNode node = operand.accept(this);
+			if (node instanceof NullClass) {
 				return new NullClass();
 			}
-
-			iriList.add(operand.asOWLClass().getIRI());
+			iriList.add(node.getIri());
 		}
 
 		if (iriList.contains(VowlThing.GENERIC_THING_IRI)) {
@@ -105,12 +124,12 @@ public class DomainRangeVisitor implements OWLObjectVisitorEx<AbstractNode> {
 	@Override
 	public AbstractNode visit(OWLObjectComplementOf ce) {
 		OWLClassExpression baseClass = ce.getOperand();
-		if (baseClass.isAnonymous()) {
-			logger.info("Complement base is anonym:" + baseClass);
+		AbstractNode operand = baseClass.accept(this);
+		if (operand instanceof NullClass) {
 			return new NullClass();
 		}
 
-		return vowlData.getGenerator().generateComplement(baseClass.asOWLClass().getIRI());
+		return vowlData.getGenerator().generateComplement(operand.getIri());
 	}
 
 	@Nonnull

@@ -300,10 +300,10 @@ public class JsonGeneratorVisitorImpl implements JsonGeneratorVisitor {
 	}
 
 	/**
-	 * @return Empty string if value is <= 0 else the value.
+	 * @return Empty string for an unspecified cardinality, otherwise its value.
 	 */
 	private String getCardinality(Integer value) {
-		if (value <= 0) {
+		if (value < 0) {
 			return StringUtils.EMPTY;
 		}
 
