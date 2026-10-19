@@ -1,6 +1,6 @@
 # Restriction conversion and WIDOCO compatibility
 
-The release candidate 1.1.0 preserves the existing Java 11/OWLAPI 5.1.18
+Version 1.1.0 preserves the existing Java 11/OWLAPI 5.1.18
 API and WebVOWL JSON format. Published 1.0.1 artifacts and tags remain unchanged.
 
 ## Corrected cases
