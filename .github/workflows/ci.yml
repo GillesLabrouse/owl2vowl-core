@@ -146,6 +146,15 @@ jobs:
           .trivy-tools/trivy --cache-dir .trivy-cache --version > target/security/widoco-trivy-version.txt
           sha256sum widoco/JAR/widoco-1.4.26-jar-with-dependencies.jar > target/security/widoco-sha256.txt
           node scripts/security/summarize-trivy.mjs target/security/widoco-security-summary.json target/security/trivy-widoco.json
+      - name: Verify the final jsoup-updated artifact in WebVOWL and the CLI
+        run: |
+          python scripts/extract-webvowl.py widoco/JAR/widoco-1.4.26-jar-with-dependencies.jar widoco/src/main/resources/webvowl_1.1.7_patched target/final-packaged-webvowl
+          node scripts/browser-compatibility.cjs target/final-packaged-webvowl target/compatibility target/final-browser.json
+          java -Djava.awt.headless=true -jar widoco/JAR/widoco-1.4.26-jar-with-dependencies.jar -ontFile target/compatibility/scoped-bounds.owl -outFolder target/final-documentation -rewriteAll -webVowl -lang en
+          mkdir -p target/final-cli-fixture
+          cp target/final-documentation/webvowl/data/ontology.json target/final-cli-fixture/scoped-bounds.json
+          node -e "const r=require('./target/final-cli-fixture/scoped-bounds.json'); for(const value of ['4','5']) if(!r.propertyAttribute.some(p=>p.cardinality===value)) throw new Error('Missing CLI cardinality '+value); if(!r.propertyAttribute.some(p=>p.minCardinality==='1'&&p.maxCardinality==='3')) throw new Error('Missing CLI bounds');"
+          node scripts/browser-compatibility.cjs target/final-documentation/webvowl target/final-cli-fixture target/final-cli-browser.json
       - uses: actions/upload-artifact@v7
         if: always()
         with:
@@ -158,6 +167,10 @@ jobs:
             target/browser-compatibility.*
             target/cli-browser.*
             target/cli-fixture/*.json
+            target/final-browser.*
+            target/final-cli-browser.*
+            target/final-cli-fixture/*.json
+            target/final-packaged-webvowl.json
             target/packaged-webvowl.json
             target/security/*.json
             target/security/*.txt

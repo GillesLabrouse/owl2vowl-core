@@ -60,7 +60,7 @@ properties, named restrictions, positive unqualified cardinalities and imports.
 
 ## Known limitations
 
-The development version `1.1.0-SNAPSHOT` fixes explicit zero cardinalities,
+The release candidate `1.1.0` fixes explicit zero cardinalities,
 qualified cardinalities with named class/datatype fillers, boolean class fillers
 (including nested intersections/unions), and plain URN identifiers. Qualified
 cardinalities use separate edges for their restricting class and filler, without

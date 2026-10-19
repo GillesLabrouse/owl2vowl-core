@@ -1,6 +1,6 @@
 # Restriction conversion and WIDOCO compatibility
 
-The development version 1.1.0-SNAPSHOT preserves the existing Java 11/OWLAPI 5.1.18
+The release candidate 1.1.0 preserves the existing Java 11/OWLAPI 5.1.18
 API and WebVOWL JSON format. Published 1.0.1 artifacts and tags remain unchanged.
 
 ## Corrected cases
@@ -54,6 +54,11 @@ changing the converter does not change jsoup. The jsoup project records the fix 
 [release 1.23.2](https://github.com/jhy/jsoup/releases/tag/jsoup-1.23.2).
 The independent [one-line WIDOCO patch](widoco-jsoup-1.23.2.patch) can be applied
 to the pinned WIDOCO checkout without changing its converter version.
+
+The security variant is also checked after its final rebuild: the packaged
+viewer is extracted again, all browser fixtures are rendered, and WIDOCO's CLI
+generates and displays fresh documentation. This checks the artifact with the
+updated jsoup dependency, rather than relying on the earlier stock build.
 
 For an existing WIDOCO checkout, the packaged-viewer checks can also run locally:
 
