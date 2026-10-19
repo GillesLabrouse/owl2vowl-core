@@ -29,7 +29,7 @@ released dependency to your Maven project:
     <dependency>
         <groupId>com.github.silverspy</groupId>
         <artifactId>owl2vowl-core</artifactId>
-        <version>1.0.1</version>
+        <version>1.1.0</version>
     </dependency>
 </dependencies>
 ```
@@ -60,7 +60,7 @@ properties, named restrictions, positive unqualified cardinalities and imports.
 
 ## Known limitations
 
-The release candidate `1.1.0` fixes explicit zero cardinalities,
+Version `1.1.0` fixes explicit zero cardinalities,
 qualified cardinalities with named class/datatype fillers, boolean class fillers
 (including nested intersections/unions), and plain URN identifiers. Qualified
 cardinalities use separate edges for their restricting class and filler, without
@@ -85,7 +85,7 @@ stack removes the obsolete libraries associated with these critical advisories:
 
 The remaining runtime dependencies are updated and checked, including transitive
 dependencies. Trivy and OSV reported no known Java vulnerabilities for release
-1.0.1 and its resolved dependency graph at the scanned versions. The
-[release](https://github.com/silverspy/owl2vowl-core/releases/tag/1.0.1) includes
+1.1.0 and its resolved dependency graph at the scanned versions. The
+[release](https://github.com/GillesLabrouse/owl2vowl-core/releases/tag/1.1.0) includes
 the security reports, source artifacts and checksums. See [SECURITY.md](SECURITY.md)
 for vulnerability reporting.
