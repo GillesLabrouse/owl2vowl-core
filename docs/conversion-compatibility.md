@@ -43,6 +43,18 @@ CI runs these tests on Java 11, 17 and 21. An additional integration job:
    Trivy, retaining all severities and using an empty ignore file. Java package
    detection is mandatory. These scans concern Java, not the viewer's JavaScript.
 
+The pinned WIDOCO revision uses jsoup 1.23.1, independently flagged HIGH for
+`CVE-2026-75140` by the October 19, 2026 Trivy database. CI retains that unfiltered
+stock-JAR report and checksum. It then builds and tests a separate security variant
+with jsoup 1.23.2 and gates that final JAR against HIGH/CRITICAL/UNKNOWN findings.
+The modified POM and both JARs/reports are retained, so the upstream alert is not
+suppressed or confused with the corrected variant. Deploying WIDOCO under a
+zero-HIGH/CRITICAL policy also requires this independent WIDOCO dependency update;
+changing the converter does not change jsoup. The jsoup project records the fix in
+[release 1.23.2](https://github.com/jhy/jsoup/releases/tag/jsoup-1.23.2).
+The independent [one-line WIDOCO patch](widoco-jsoup-1.23.2.patch) can be applied
+to the pinned WIDOCO checkout without changing its converter version.
+
 For an existing WIDOCO checkout, the packaged-viewer checks can also run locally:
 
 ```sh

@@ -57,9 +57,9 @@ jobs:
           .trivy-tools/trivy fs --cache-dir .trivy-cache --scanners vuln --detection-priority comprehensive --ignorefile target/security/empty.trivyignore --list-all-pkgs --no-progress --timeout 15m --format json --output target/security/trivy-source.json .
           .trivy-tools/trivy rootfs --cache-dir .trivy-cache --scanners vuln --detection-priority comprehensive --ignorefile target/security/empty.trivyignore --list-all-pkgs --no-progress --timeout 15m --format json --output target/security/trivy-jar.json "$LIBRARY_JAR"
           node -e "const r=require('./target/security/trivy-jar.json'); if(!r.Results?.some(x=>x.Type==='jar'&&x.Packages?.length)) throw new Error('Trivy detected no Java packages');"
-          node scripts/security/summarize-trivy.mjs target/security/trivy-summary.json target/security/trivy-source.json target/security/trivy-jar.json
           .trivy-tools/trivy --cache-dir .trivy-cache --version > target/security/trivy-version.txt
           sha256sum "$LIBRARY_JAR" "${LIBRARY_JAR%.jar}-sources.jar" pom.xml > target/security/sha256.txt
+          node scripts/security/summarize-trivy.mjs target/security/trivy-summary.json target/security/trivy-source.json target/security/trivy-jar.json
       - name: Preserve release candidates and audit reports
         if: always()
         uses: actions/upload-artifact@v7
@@ -95,6 +95,8 @@ jobs:
           mkdir -p target/security
           git rev-parse HEAD > target/security/source-commit.txt
           git -C widoco rev-parse HEAD > target/security/widoco-commit.txt
+          cp widoco/JAR/widoco-1.4.26-jar-with-dependencies.jar target/widoco-stock.jar
+          sha256sum target/widoco-stock.jar > target/security/widoco-stock-sha256.txt
       - name: Compare complete graphs against release 1.0.1
         run: |
           mkdir -p target/regression/classes
@@ -129,14 +131,21 @@ jobs:
           curl --fail --location --retry 3 --output checksums.txt https://github.com/aquasecurity/trivy/releases/download/v0.74.0/trivy_0.74.0_checksums.txt
           sha256sum --check --ignore-missing checksums.txt
           tar -xzf trivy_0.74.0_Linux-64bit.tar.gz trivy
-      - name: Scan the final WIDOCO JAR
+      - name: Record the unfiltered stock WIDOCO scan
         run: |
           : > target/security/empty.trivyignore
+          .trivy-tools/trivy rootfs --cache-dir .trivy-cache --scanners vuln --detection-priority comprehensive --ignorefile target/security/empty.trivyignore --list-all-pkgs --no-progress --timeout 15m --format json --output target/security/trivy-widoco-stock.json target/widoco-stock.jar
+          node -e "const r=require('./target/security/trivy-widoco-stock.json'); if(!r.Results?.some(x=>x.Type==='jar'&&x.Packages?.length)) throw new Error('Trivy detected no Java packages'); console.log(JSON.stringify(r.Results.flatMap(x=>x.Vulnerabilities||[]).map(v=>({id:v.VulnerabilityID,package:v.PkgName,version:v.InstalledVersion,severity:v.Severity}))));"
+      - name: Build and gate the independently patched WIDOCO security variant
+        run: |
+          python scripts/prepare-widoco.py widoco/pom.xml 1.23.2
+          ./mvnw --batch-mode -f widoco/pom.xml clean verify
+          cp widoco/pom.xml target/security/widoco-security-variant.pom.xml
           .trivy-tools/trivy rootfs --cache-dir .trivy-cache --scanners vuln --detection-priority comprehensive --ignorefile target/security/empty.trivyignore --list-all-pkgs --no-progress --timeout 15m --format json --output target/security/trivy-widoco.json widoco/JAR/widoco-1.4.26-jar-with-dependencies.jar
           node -e "const r=require('./target/security/trivy-widoco.json'); if(!r.Results?.some(x=>x.Type==='jar'&&x.Packages?.length)) throw new Error('Trivy detected no Java packages');"
-          node scripts/security/summarize-trivy.mjs target/security/widoco-security-summary.json target/security/trivy-widoco.json
           .trivy-tools/trivy --cache-dir .trivy-cache --version > target/security/widoco-trivy-version.txt
           sha256sum widoco/JAR/widoco-1.4.26-jar-with-dependencies.jar > target/security/widoco-sha256.txt
+          node scripts/security/summarize-trivy.mjs target/security/widoco-security-summary.json target/security/trivy-widoco.json
       - uses: actions/upload-artifact@v7
         if: always()
         with:
@@ -152,5 +161,7 @@ jobs:
             target/packaged-webvowl.json
             target/security/*.json
             target/security/*.txt
+            target/security/*.xml
+            target/widoco-stock.jar
             widoco/target/surefire-reports/
             widoco/JAR/*.jar

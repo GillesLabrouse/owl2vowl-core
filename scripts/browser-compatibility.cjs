@@ -40,11 +40,20 @@ const {chromium} = require('playwright');
         nodes: document.querySelectorAll('svg .node').length,
         labels: document.querySelectorAll('svg .label').length,
         cardinalities: [...document.querySelectorAll('svg text.cardinality')].map(n => n.textContent),
+        cardinalityEdges: [...document.querySelectorAll('svg g.cardinality')].filter(n =>
+          typeof n.__data__?.id === 'function').map(n => ({id: String(n.__data__.id()),
+            domain: String(n.__data__.domain().id()), range: String(n.__data__.range().id())})),
         operators: [...document.querySelectorAll('svg .node')].filter(n =>
           typeof n.__data__?.type === 'function' && ['owl:intersectionOf', 'owl:unionOf'].includes(n.__data__.type())).length,
         text: [...document.querySelectorAll('svg')].map(n => n.textContent).join('\n')
       }));
       assert.deepEqual(errors, [], `${file}: browser errors`);
+      for (const p of json.propertyAttribute.filter(p => p.cardinality || p.minCardinality || p.maxCardinality)) {
+        const edge = rendered.cardinalityEdges.find(e => e.id === p.id);
+        assert(edge, `${file}: missing rendered restriction ${p.id}`);
+        assert.equal(edge.domain, p.domain, `${file}: restriction domain changed in the viewer`);
+        assert.equal(edge.range, p.range, `${file}: restriction range changed in the viewer`);
+      }
       if (file === 'unrestricted.json') assert.deepEqual(rendered.cardinalities, []);
       if (file.startsWith('intersection-') || file === 'nested-intersections.json')
         assert(rendered.operators > 0, `${file}: missing boolean operator`);

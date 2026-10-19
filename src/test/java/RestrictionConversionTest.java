@@ -211,6 +211,22 @@ public class RestrictionConversionTest {
         assertEquals("", properties(root, x.data.getIRI()).get(0).path("cardinality").asText());
     }
 
+    @Test public void keepsScopedEdgesSeparateFromGeneralInverseAndEquivalentProperties() throws Exception {
+        for (boolean inverse : new boolean[]{false, true}) {
+            Fixture x = new Fixture();
+            OWLObjectProperty related = x.f.getOWLObjectProperty(IRI.create(x.base + "related"));
+            if (inverse) x.add(x.f.getOWLInverseObjectPropertiesAxiom(x.property, related));
+            else x.add(x.f.getOWLEquivalentObjectPropertiesAxiom(x.property, related));
+            x.restrict(x.f.getOWLObjectExactCardinality(2, x.property, x.target));
+            JsonNode root = x.convert(inverse ? "qualified-inverse-declaration" : "qualified-equivalent-declaration");
+            JsonNode scoped = edge(root, x.property.getIRI(), x.child.getIRI(), x.target.getIRI());
+            assertEquals("", scoped.path("inverse").asText());
+            assertEquals(0, scoped.path("equivalent").size());
+            JsonNode general = edge(root, x.property.getIRI(), x.parent.getIRI(), x.other.getIRI());
+            assertTrue(inverse ? !general.path("inverse").asText().isEmpty() : general.path("equivalent").size() > 0);
+        }
+    }
+
     private static OWLClassExpression cardinality(Fixture x, String kind, int n, boolean data, boolean qualified) {
         if (data) {
             OWLDataRange filler = qualified ? x.f.getIntegerOWLDatatype() : x.f.getTopDatatype();
