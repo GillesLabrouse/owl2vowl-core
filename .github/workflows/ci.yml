@@ -37,9 +37,12 @@ jobs:
       - name: Audit dependencies and actual library contents
         run: |
           mkdir -p target/security
+          library_jar="$(find target -maxdepth 1 -name 'owl2vowl-core-*.jar' ! -name '*-sources.jar')"
+          test -f "$library_jar"
+          echo "LIBRARY_JAR=$library_jar" >> "$GITHUB_ENV"
           node scripts/security/tree-inventory.mjs dependency-tree.txt target/security/dependencies.json
           node scripts/security/scan-osv.mjs target/security/dependencies.json target/security/osv.json --fail-on-vulnerability
-          python scripts/security/jar-inventory.py target/owl2vowl-core-1.0.1.jar target/security/jar.json --assert-clean
+          python scripts/security/jar-inventory.py "$library_jar" target/security/jar.json --assert-clean
       - name: Install checksum-verified Trivy 0.74.0
         run: |
           mkdir -p .trivy-tools
@@ -52,19 +55,126 @@ jobs:
         run: |
           : > target/security/empty.trivyignore
           .trivy-tools/trivy fs --cache-dir .trivy-cache --scanners vuln --detection-priority comprehensive --ignorefile target/security/empty.trivyignore --list-all-pkgs --no-progress --timeout 15m --format json --output target/security/trivy-source.json .
-          .trivy-tools/trivy rootfs --cache-dir .trivy-cache --scanners vuln --detection-priority comprehensive --ignorefile target/security/empty.trivyignore --list-all-pkgs --no-progress --timeout 15m --format json --output target/security/trivy-jar.json target/owl2vowl-core-1.0.1.jar
-          node scripts/security/summarize-trivy.mjs target/security/trivy-summary.json target/security/trivy-source.json target/security/trivy-jar.json
+          .trivy-tools/trivy rootfs --cache-dir .trivy-cache --scanners vuln --detection-priority comprehensive --ignorefile target/security/empty.trivyignore --list-all-pkgs --no-progress --timeout 15m --format json --output target/security/trivy-jar.json "$LIBRARY_JAR"
+          node -e "const r=require('./target/security/trivy-jar.json'); if(!r.Results?.some(x=>x.Type==='jar'&&x.Packages?.length)) throw new Error('Trivy detected no Java packages');"
           .trivy-tools/trivy --cache-dir .trivy-cache --version > target/security/trivy-version.txt
-          sha256sum target/owl2vowl-core-1.0.1.jar target/owl2vowl-core-1.0.1-sources.jar pom.xml > target/security/sha256.txt
+          sha256sum "$LIBRARY_JAR" "${LIBRARY_JAR%.jar}-sources.jar" pom.xml > target/security/sha256.txt
+          node scripts/security/summarize-trivy.mjs target/security/trivy-summary.json target/security/trivy-source.json target/security/trivy-jar.json
       - name: Preserve release candidates and audit reports
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: standalone-converter-audit
           path: |
-            target/owl2vowl-core-1.0.1.jar
-            target/owl2vowl-core-1.0.1-sources.jar
+            target/*.jar
+            target/compatibility/*.json
             pom.xml
             dependency-tree.txt
             target/security/*.json
             target/security/*.txt
+
+  widoco-compatibility:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7
+        with:
+          repository: dgarijo/Widoco
+          ref: d55952f71abdde5c8e590873a4eae662e5254363
+          path: widoco
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '11'
+          cache: maven
+      - name: Build the candidate and WIDOCO with its original tests
+        run: |
+          ./mvnw --batch-mode clean install
+          python scripts/prepare-widoco.py widoco/pom.xml
+          ./mvnw --batch-mode -f widoco/pom.xml verify
+          mkdir -p target/security
+          git rev-parse HEAD > target/security/source-commit.txt
+          git -C widoco rev-parse HEAD > target/security/widoco-commit.txt
+          cp widoco/JAR/widoco-1.4.26-jar-with-dependencies.jar target/widoco-stock.jar
+          sha256sum target/widoco-stock.jar > target/security/widoco-stock-sha256.txt
+      - name: Compare complete graphs against release 1.0.1
+        run: |
+          mkdir -p target/regression/classes
+          curl --fail --location --retry 3 --output target/regression/baseline.jar https://jitpack.io/com/github/silverspy/owl2vowl-core/1.0.1/owl2vowl-core-1.0.1.jar
+          echo '3642175ca1f59d4c0c10e60f4d5cebbe07243540ee254960d4664107c37234b9  target/regression/baseline.jar' | sha256sum --check
+          widoco_jar=widoco/JAR/widoco-1.4.26-jar-with-dependencies.jar
+          javac --release 11 -cp "$widoco_jar" -d target/regression/classes scripts/ConverterFeatureProbe.java
+          java -cp "target/regression/classes:target/regression/baseline.jar:$widoco_jar" ConverterFeatureProbe it.gov.innovazione.owl2vowl.Owl2Vowl target/regression/before > target/regression/before.log
+          java -cp "target/regression/classes:$widoco_jar" ConverterFeatureProbe it.gov.innovazione.owl2vowl.Owl2Vowl target/regression/after > target/regression/after.log
+          node scripts/compare-conversions.mjs target/regression/before target/regression/after target/regression/comparison.json
+      - name: Install the browser test tools
+        run: |
+          npm install --prefix target/browser-tools --no-save --no-package-lock playwright@1.62.1
+          target/browser-tools/node_modules/.bin/playwright install --with-deps chromium
+          echo "NODE_PATH=$GITHUB_WORKSPACE/target/browser-tools/node_modules" >> "$GITHUB_ENV"
+      - name: Check WIDOCO's actual packaged WebVOWL
+        run: |
+          python scripts/extract-webvowl.py widoco/JAR/widoco-1.4.26-jar-with-dependencies.jar widoco/src/main/resources/webvowl_1.1.7_patched target/packaged-webvowl
+          node scripts/browser-compatibility.cjs target/packaged-webvowl target/compatibility target/browser-compatibility.json
+      - name: Generate and display documentation through WIDOCO's CLI
+        run: |
+          java -Djava.awt.headless=true -jar widoco/JAR/widoco-1.4.26-jar-with-dependencies.jar -ontFile target/compatibility/scoped-bounds.owl -outFolder target/widoco-documentation -rewriteAll -webVowl -lang en
+          mkdir -p target/cli-fixture
+          cp target/widoco-documentation/webvowl/data/ontology.json target/cli-fixture/scoped-bounds.json
+          node -e "const r=require('./target/cli-fixture/scoped-bounds.json'); for(const value of ['4','5']) if(!r.propertyAttribute.some(p=>p.cardinality===value)) throw new Error('Missing CLI cardinality '+value); if(!r.propertyAttribute.some(p=>p.minCardinality==='1'&&p.maxCardinality==='3')) throw new Error('Missing CLI bounds');"
+          node scripts/browser-compatibility.cjs target/widoco-documentation/webvowl target/cli-fixture target/cli-browser.json
+      - name: Install checksum-verified Trivy 0.74.0
+        run: |
+          mkdir -p .trivy-tools
+          cd .trivy-tools
+          curl --fail --location --retry 3 --output trivy_0.74.0_Linux-64bit.tar.gz https://github.com/aquasecurity/trivy/releases/download/v0.74.0/trivy_0.74.0_linux-64bit.tar.gz
+          curl --fail --location --retry 3 --output checksums.txt https://github.com/aquasecurity/trivy/releases/download/v0.74.0/trivy_0.74.0_checksums.txt
+          sha256sum --check --ignore-missing checksums.txt
+          tar -xzf trivy_0.74.0_Linux-64bit.tar.gz trivy
+      - name: Record the unfiltered stock WIDOCO scan
+        run: |
+          : > target/security/empty.trivyignore
+          .trivy-tools/trivy rootfs --cache-dir .trivy-cache --scanners vuln --detection-priority comprehensive --ignorefile target/security/empty.trivyignore --list-all-pkgs --no-progress --timeout 15m --format json --output target/security/trivy-widoco-stock.json target/widoco-stock.jar
+          node -e "const r=require('./target/security/trivy-widoco-stock.json'); if(!r.Results?.some(x=>x.Type==='jar'&&x.Packages?.length)) throw new Error('Trivy detected no Java packages'); console.log(JSON.stringify(r.Results.flatMap(x=>x.Vulnerabilities||[]).map(v=>({id:v.VulnerabilityID,package:v.PkgName,version:v.InstalledVersion,severity:v.Severity}))));"
+      - name: Build and gate the independently patched WIDOCO security variant
+        run: |
+          python scripts/prepare-widoco.py widoco/pom.xml 1.23.2
+          ./mvnw --batch-mode -f widoco/pom.xml clean verify
+          cp widoco/pom.xml target/security/widoco-security-variant.pom.xml
+          .trivy-tools/trivy rootfs --cache-dir .trivy-cache --scanners vuln --detection-priority comprehensive --ignorefile target/security/empty.trivyignore --list-all-pkgs --no-progress --timeout 15m --format json --output target/security/trivy-widoco.json widoco/JAR/widoco-1.4.26-jar-with-dependencies.jar
+          node -e "const r=require('./target/security/trivy-widoco.json'); if(!r.Results?.some(x=>x.Type==='jar'&&x.Packages?.length)) throw new Error('Trivy detected no Java packages');"
+          .trivy-tools/trivy --cache-dir .trivy-cache --version > target/security/widoco-trivy-version.txt
+          sha256sum widoco/JAR/widoco-1.4.26-jar-with-dependencies.jar > target/security/widoco-sha256.txt
+          node scripts/security/summarize-trivy.mjs target/security/widoco-security-summary.json target/security/trivy-widoco.json
+      - name: Verify the final jsoup-updated artifact in WebVOWL and the CLI
+        run: |
+          python scripts/extract-webvowl.py widoco/JAR/widoco-1.4.26-jar-with-dependencies.jar widoco/src/main/resources/webvowl_1.1.7_patched target/final-packaged-webvowl
+          node scripts/browser-compatibility.cjs target/final-packaged-webvowl target/compatibility target/final-browser.json
+          java -Djava.awt.headless=true -jar widoco/JAR/widoco-1.4.26-jar-with-dependencies.jar -ontFile target/compatibility/scoped-bounds.owl -outFolder target/final-documentation -rewriteAll -webVowl -lang en
+          mkdir -p target/final-cli-fixture
+          cp target/final-documentation/webvowl/data/ontology.json target/final-cli-fixture/scoped-bounds.json
+          node -e "const r=require('./target/final-cli-fixture/scoped-bounds.json'); for(const value of ['4','5']) if(!r.propertyAttribute.some(p=>p.cardinality===value)) throw new Error('Missing CLI cardinality '+value); if(!r.propertyAttribute.some(p=>p.minCardinality==='1'&&p.maxCardinality==='3')) throw new Error('Missing CLI bounds');"
+          node scripts/browser-compatibility.cjs target/final-documentation/webvowl target/final-cli-fixture target/final-cli-browser.json
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: widoco-converter-compatibility
+          path: |
+            target/compatibility/*.json
+            target/compatibility/*.owl
+            target/regression/*.json
+            target/regression/*.log
+            target/browser-compatibility.*
+            target/cli-browser.*
+            target/cli-fixture/*.json
+            target/final-browser.*
+            target/final-cli-browser.*
+            target/final-cli-fixture/*.json
+            target/final-packaged-webvowl.json
+            target/packaged-webvowl.json
+            target/security/*.json
+            target/security/*.txt
+            target/security/*.xml
+            target/widoco-stock.jar
+            widoco/target/surefire-reports/
+            widoco/JAR/*.jar

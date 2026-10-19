@@ -2,7 +2,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>com.github.silverspy</groupId>
     <artifactId>owl2vowl-core</artifactId>
-    <version>1.0.1</version>
+    <version>1.1.0</version>
     <name>Standalone OWL2VOWL core</name>
     <description>OWLAPI to WebVOWL JSON conversion without a server.</description>
     <url>https://github.com/silverspy/owl2vowl-core</url>
@@ -108,6 +108,17 @@
         </dependency>
     </dependencies>
     <build>
+        <resources>
+            <resource>
+                <directory>src/main/resources</directory>
+                <excludes><exclude>version.properties</exclude></excludes>
+            </resource>
+            <resource>
+                <directory>src/main/resources</directory>
+                <filtering>true</filtering>
+                <includes><include>version.properties</include></includes>
+            </resource>
+        </resources>
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>

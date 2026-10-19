@@ -113,8 +113,9 @@ public class VowlSearcher implements VowlElementVisitor {
 
 	public VowlClass getIntersection(Collection<IRI> intersectionIris) {
 		checkConsistenty();
+		Set<IRI> operands = new HashSet<>(intersectionIris);
 		for (VowlClass intersection : intersections) {
-			if (intersection.getElementOfIntersection().containsAll(intersectionIris)) {
+			if (intersection.getElementOfIntersection().equals(operands)) {
 				return intersection;
 			}
 		}
@@ -126,7 +127,7 @@ public class VowlSearcher implements VowlElementVisitor {
 		checkConsistenty();
 
 		for (VowlClass union : unions) {
-			if (union.getElementOfIntersection().containsAll(iriList)) {
+			if (union.getElementsOfUnion().equals(iriList)) {
 				return union;
 			}
 		}

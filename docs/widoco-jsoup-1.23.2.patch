@@ -1,0 +1,10 @@
+diff --git a/pom.xml b/pom.xml
+--- a/pom.xml
++++ b/pom.xml
+@@ -24,5 +24,5 @@
+ 		<dependency>
+ 			<groupId>org.jsoup</groupId>
+ 			<artifactId>jsoup</artifactId>
+-			<version>1.23.1</version>
++			<version>1.23.2</version>
+ 		</dependency>

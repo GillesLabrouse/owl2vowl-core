@@ -39,6 +39,10 @@ public class ComparisonHelper {
 			}
 		}
 
+		if (trimmedElementIri.regionMatches(true, 0, "urn:", 0, 4)
+				&& trimmedOntologyIri.regionMatches(true, 0, "urn:", 0, 4)) {
+			return !extractBaseIRI(trimmedElementIri).equals(extractBaseIRI(trimmedOntologyIri));
+		}
 		return true;
 	}
 
@@ -78,7 +82,14 @@ public class ComparisonHelper {
 		}
 
 		// e.g. http://test.de/working/theworker
-		return iri.substring(0, iri.lastIndexOf("/"));
+		int separator = iri.lastIndexOf("/");
+		if (separator >= 0) {
+			return iri.substring(0, separator);
+		}
+
+		// Opaque IRIs (including URNs) have no slash-delimited path.
+		int colon = iri.lastIndexOf(":");
+		return colon >= 0 ? iri.substring(0, colon + 1) : iri;
 	}
 
 	private static String removeTrailingHash(String text) {

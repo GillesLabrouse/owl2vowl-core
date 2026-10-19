@@ -15,12 +15,17 @@ import it.gov.innovazione.owl2vowl.model.individuals.VowlIndividual;
 import org.semanticweb.owlapi.model.IRI;
 
 import java.util.Collection;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 /**
  * @author Eduard
  */
 public class VowlGenerator {
 	private final VowlData vowlData;
+	private final Map<List<IRI>, ObjectCardinalityReference> objectCardinalities = new HashMap<>();
+	private final Map<List<IRI>, DatatypeCardinalityReference> dataCardinalities = new HashMap<>();
 
 	public VowlGenerator(VowlData vowlData) {
 		this.vowlData = vowlData;
@@ -134,6 +139,30 @@ public class VowlGenerator {
 		vowlData.addDatatype(reference1);
 
 		return reference1;
+	}
+
+	public ObjectCardinalityReference generateObjectCardinalityReference(IRI reference, IRI domain, IRI range) {
+		return objectCardinalities.computeIfAbsent(List.of(reference, domain, range), key -> {
+			ObjectCardinalityReference property = new ObjectCardinalityReference(vowlData.getNewIri(), reference);
+			property.setGenerated(VowlGenerationEnum.MANUALLY);
+			property.addDomain(domain);
+			property.addRange(range);
+			vowlData.addObjectProperty(property);
+			vowlData.getPropertyForIri(reference).addReferencedProperty(property.getIri());
+			return property;
+		});
+	}
+
+	public DatatypeCardinalityReference generateDatatypeCardinalityReference(IRI reference, IRI domain, IRI datatype) {
+		return dataCardinalities.computeIfAbsent(List.of(reference, domain, datatype), key -> {
+			DatatypeCardinalityReference property = new DatatypeCardinalityReference(vowlData.getNewIri(), reference);
+			property.setGenerated(VowlGenerationEnum.MANUALLY);
+			property.addDomain(domain);
+			property.addRange(generateDatatypeReference(datatype).getIri());
+			vowlData.addDatatypeProperty(property);
+			vowlData.getPropertyForIri(reference).addReferencedProperty(property.getIri());
+			return property;
+		});
 	}
 
 	public ObjectValueReference generateObjectValueReference(IRI reference, PropertyAllSomeValue value) {

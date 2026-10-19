@@ -60,9 +60,17 @@ properties, named restrictions, positive unqualified cardinalities and imports.
 
 ## Known limitations
 
-Qualified cardinalities, zero max/exact cardinalities, anonymous intersection
-fillers and the tested plain URN form remain incomplete, as in the original
-converter. This library is not a reasoner or a lossless OWL representation.
+The release candidate `1.1.0` fixes explicit zero cardinalities,
+qualified cardinalities with named class/datatype fillers, boolean class fillers
+(including nested intersections/unions), and plain URN identifiers. Qualified
+cardinalities use separate edges for their restricting class and filler, without
+changing the property's general domain/range. These fixes are not in release 1.0.1.
+
+Inverse-property cardinality restrictions, datatype facets, arbitrary nested
+restrictions and general class axioms remain outside the supported conversion
+subset. Conflicting cardinalities are not diagnosed. This library is not a
+reasoner or a lossless OWL representation. See the
+[compatibility checks](docs/conversion-compatibility.md) for scope and reproduction.
 
 ## Security fixes
 

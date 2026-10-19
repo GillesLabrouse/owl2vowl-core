@@ -5,10 +5,12 @@ import it.gov.innovazione.owl2vowl.constants.VowlAttribute;
 import it.gov.innovazione.owl2vowl.model.data.VowlData;
 import it.gov.innovazione.owl2vowl.model.entities.nodes.AbstractNode;
 import it.gov.innovazione.owl2vowl.model.entities.nodes.classes.AbstractClass;
+import it.gov.innovazione.owl2vowl.model.entities.nodes.classes.NullClass;
 import it.gov.innovazione.owl2vowl.model.entities.properties.AbstractProperty;
 import it.gov.innovazione.owl2vowl.model.entities.properties.DatatypeValueReference;
 import it.gov.innovazione.owl2vowl.model.entities.properties.ObjectValueReference;
 import it.gov.innovazione.owl2vowl.parser.owlapi.IndividualsVisitor;
+import it.gov.innovazione.owl2vowl.parser.vowl.property.DomainRangeVisitor;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -133,61 +135,59 @@ public class OwlClassAxiomVisitor implements OWLObjectVisitor {
 
 	@Override
 	public void visit(OWLObjectMinCardinality ce) {
-		if (!ce.getFiller().isOWLThing() && !ce.getFiller().isOWLNothing()) {
-			// Filler class specification not supported for cardinalities
-			logger.info("Specification of cardinalities not supported yet: " + ce);
-			return;
-		}
-
-		OWLObjectProperty property = ce.getProperty().getNamedProperty();
-		AbstractProperty vowlProperty = vowlData.getPropertyForIri(property.getIRI());
-		vowlProperty.setMinCardinality(ce.getCardinality());
-		vowlProperty=null;
-		property=null;
+		AbstractProperty property = cardinalityProperty(ce);
+		if (property != null) property.setMinCardinality(ce.isQualified()
+				? Math.max(property.getMinCardinality(), ce.getCardinality()) : ce.getCardinality());
 	}
 
 	@Override
 	public void visit(OWLDataExactCardinality ce) {
-		OWLDataPropertyExpression property = ce.getProperty();
-		if (property.isAnonymous()) {
-			logger.info("Anonymous dataproperty for exact cardinality.");
-			return;
-		}
-		AbstractProperty vowlProperty = vowlData.getPropertyForIri(property.asOWLDataProperty().getIRI());
-		vowlProperty.setExactCardinality(ce.getCardinality());
-		
-		property=null;
-		vowlProperty=null;
+		AbstractProperty property = cardinalityProperty(ce);
+		if (property != null) property.setExactCardinality(ce.getCardinality());
 	}
 
 	@Override
 	public void visit(OWLDataMaxCardinality ce) {
-		OWLDataPropertyExpression property = ce.getProperty();
-		if (property.isAnonymous()) {
-			logger.info("Anonymous dataproperty for max cardinality.");
-			return;
-		}
-		AbstractProperty vowlProperty = vowlData.getPropertyForIri(property.asOWLDataProperty().getIRI());
-		vowlProperty.setMaxCardinality(ce.getCardinality());
-		
-		property=null;
-		vowlProperty=null;
-	
+		AbstractProperty property = cardinalityProperty(ce);
+		if (property != null) property.setMaxCardinality(ce.isQualified() && property.getMaxCardinality() >= 0
+				? Math.min(property.getMaxCardinality(), ce.getCardinality()) : ce.getCardinality());
 	}
 
 	@Override
 	public void visit(OWLDataMinCardinality ce) {
-		OWLDataPropertyExpression property = ce.getProperty();
+		AbstractProperty property = cardinalityProperty(ce);
+		if (property != null) property.setMinCardinality(ce.isQualified()
+				? Math.max(property.getMinCardinality(), ce.getCardinality()) : ce.getCardinality());
+	}
 
-		if (property.isAnonymous()) {
-			logger.info("Anonymous dataproperty for min cardinality.");
-			return;
+	private AbstractProperty cardinalityProperty(OWLDataCardinalityRestriction ce) {
+		IRI property = ce.getProperty().asOWLDataProperty().getIRI();
+		if (!ce.isQualified()) {
+			return vowlData.getPropertyForIri(property);
 		}
-		AbstractProperty vowlProperty = vowlData.getPropertyForIri(property.asOWLDataProperty().getIRI());
-		vowlProperty.setMinCardinality(ce.getCardinality());
-		
-		property=null;
-		vowlProperty=null;
+		if (!ce.getFiller().isOWLDatatype()) {
+			logger.info("Unsupported cardinality datatype expression: " + ce);
+			return null;
+		}
+		return vowlData.getGenerator().generateDatatypeCardinalityReference(
+				property, owlClass.getIRI(), ce.getFiller().asOWLDatatype().getIRI());
+	}
+
+	private AbstractProperty cardinalityProperty(OWLObjectCardinalityRestriction ce) {
+		OWLObjectProperty property = ce.getProperty().getNamedProperty();
+		if (!ce.isQualified() || ce.getFiller().isOWLNothing()) {
+			return vowlData.getPropertyForIri(property.getIRI());
+		}
+		if (ce.getProperty().isAnonymous()) {
+			logger.info("Unsupported inverse-property cardinality: " + ce);
+			return null;
+		}
+		AbstractNode range = ce.getFiller().accept(new DomainRangeVisitor(property, vowlData));
+		if (range instanceof NullClass) {
+			return null;
+		}
+		return vowlData.getGenerator().generateObjectCardinalityReference(
+				property.getIRI(), owlClass.getIRI(), range.getIri());
 	}
 
 	@Override
@@ -234,15 +234,13 @@ public class OwlClassAxiomVisitor implements OWLObjectVisitor {
 	}
 
 	private void processObjectValueRestriction(OWLQuantifiedObjectRestriction ce, PropertyAllSomeValue value) {
-		if (ce.getFiller().isAnonymous()) {
-			// KNOWN LIMITATION: anonymous OWL class handling not fully specified
-			logger.info("ObjectAllValuesFrom range class is anonymous: " + ce);
+		OWLObjectProperty restrictedProperty = ce.getProperty().getNamedProperty();
+		AbstractNode rangeClass = ce.getFiller().accept(new DomainRangeVisitor(restrictedProperty, vowlData));
+		if (rangeClass instanceof NullClass) {
 			return;
 		}
-		OWLClass rangeClass = ce.getFiller().asOWLClass();
-		OWLObjectProperty restrictedProperty = ce.getProperty().getNamedProperty();
 		ObjectValueReference objectValueReference = vowlData.getGenerator().generateObjectValueReference(restrictedProperty.getIRI(), value);
-		objectValueReference.addRange(rangeClass.getIRI());
+		objectValueReference.addRange(rangeClass.getIri());
 		objectValueReference.addDomain(owlClass.getIRI());
 		
 		rangeClass=null;
@@ -253,30 +251,15 @@ public class OwlClassAxiomVisitor implements OWLObjectVisitor {
 
 	@Override
 	public void visit(OWLObjectMaxCardinality ce) {
-		if (!ce.getFiller().isOWLThing() && !ce.getFiller().isOWLNothing()) {
-			// Filler class specification not supported for cardinalities
-			logger.info("Specification of cardinalities not supported yet: " + ce);
-			return;
-		}
-		OWLObjectProperty property = ce.getProperty().getNamedProperty();
-		AbstractProperty vowlProperty = vowlData.getPropertyForIri(property.getIRI());
-		vowlProperty.setMaxCardinality(ce.getCardinality());
-		property=null;
-		vowlProperty=null;
+		AbstractProperty property = cardinalityProperty(ce);
+		if (property != null) property.setMaxCardinality(ce.isQualified() && property.getMaxCardinality() >= 0
+				? Math.min(property.getMaxCardinality(), ce.getCardinality()) : ce.getCardinality());
 	}
 
 	@Override
 	public void visit(OWLObjectExactCardinality ce) {
-		if (!ce.getFiller().isOWLThing() && !ce.getFiller().isOWLNothing()) {
-			// Filler class specification not supported for cardinalities
-			logger.info("Specification of cardinalities not supported yet: " + ce);
-			return;
-		}
-		OWLObjectProperty property = ce.getProperty().getNamedProperty();
-		AbstractProperty vowlProperty = vowlData.getPropertyForIri(property.getIRI());
-		vowlProperty.setExactCardinality(ce.getCardinality());
-		property=null;
-		vowlProperty=null;
+		AbstractProperty property = cardinalityProperty(ce);
+		if (property != null) property.setExactCardinality(ce.getCardinality());
 	}
 	@Override
 	public void visit(OWLObjectUnionOf ce) {

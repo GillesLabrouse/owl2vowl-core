@@ -36,9 +36,10 @@ public abstract class AbstractProperty extends AbstractEntity implements HasInve
 	}
 
 	private IRI inverse = null;
-	private int minCardinality;
-	private int maxCardinality;
-	private int exactCardinality;
+	// Negative means unspecified; zero is a meaningful OWL cardinality.
+	private int minCardinality = -1;
+	private int maxCardinality = -1;
+	private int exactCardinality = -1;
 
 	protected AbstractProperty(IRI iri, String type) {
 		super(iri, type);

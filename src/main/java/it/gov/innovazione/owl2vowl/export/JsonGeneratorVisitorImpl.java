@@ -9,6 +9,8 @@ import it.gov.innovazione.owl2vowl.model.entities.nodes.classes.VowlClass;
 import it.gov.innovazione.owl2vowl.model.entities.nodes.classes.VowlThing;
 import it.gov.innovazione.owl2vowl.model.entities.nodes.datatypes.*;
 import it.gov.innovazione.owl2vowl.model.entities.properties.AbstractProperty;
+import it.gov.innovazione.owl2vowl.model.entities.properties.DatatypeCardinalityReference;
+import it.gov.innovazione.owl2vowl.model.entities.properties.ObjectCardinalityReference;
 import it.gov.innovazione.owl2vowl.model.entities.properties.TypeOfProperty;
 import it.gov.innovazione.owl2vowl.model.entities.properties.VowlDatatypeProperty;
 import it.gov.innovazione.owl2vowl.model.entities.properties.VowlObjectProperty;
@@ -235,6 +237,8 @@ public class JsonGeneratorVisitorImpl implements JsonGeneratorVisitor {
 		Map<String, Object> object = new HashMap<>();
 		Map<String, Object> attributes = new HashMap<>();
 		AbstractProperty reference = vowlData.getPropertyForIri(((HasReference) property).getReferenceIri());
+		boolean scopedCardinality = property instanceof ObjectCardinalityReference
+				|| property instanceof DatatypeCardinalityReference;
 
 		object.put("id", vowlData.getIdForEntity(property));
 		object.put("type", property.getType());
@@ -249,10 +253,13 @@ public class JsonGeneratorVisitorImpl implements JsonGeneratorVisitor {
 		attributes.put("comment", getLabelsFromAnnotations(reference.getAnnotations().getComments()));
 		attributes.put("attributes", Stream.concat(property.getAttributes().stream(), reference.getAttributes().stream()).collect(Collectors.toSet()));
 		attributes.put("annotations", reference.getAnnotations().getIdentifierToAnnotation());
-		attributes.put("inverse", getIdForIri(reference.getInverse()));
+		// A general inverse/equivalent edge can have different endpoints. Binding
+		// it here makes WebVOWL merge away the scoped cardinality restriction.
+		attributes.put("inverse", scopedCardinality ? null : getIdForIri(reference.getInverse()));
 		attributes.put("superproperty", getListWithIds(reference.getSuperEntities()));
 		attributes.put("subproperty", getListWithIds(reference.getSubEntities()));
-		attributes.put("equivalent", getListWithIds(reference.getSortedEquivalents()));
+		attributes.put("equivalent", scopedCardinality ? Collections.emptyList()
+				: getListWithIds(reference.getSortedEquivalents()));
 		attributes.put("minCardinality", getCardinality(property.getMinCardinality()));
 		attributes.put("maxCardinality", getCardinality(property.getMaxCardinality()));
 		attributes.put("cardinality", getCardinality(property.getExactCardinality()));
@@ -300,10 +307,10 @@ public class JsonGeneratorVisitorImpl implements JsonGeneratorVisitor {
 	}
 
 	/**
-	 * @return Empty string if value is <= 0 else the value.
+	 * @return Empty string for an unspecified cardinality, otherwise its value.
 	 */
 	private String getCardinality(Integer value) {
-		if (value <= 0) {
+		if (value < 0) {
 			return StringUtils.EMPTY;
 		}
 
