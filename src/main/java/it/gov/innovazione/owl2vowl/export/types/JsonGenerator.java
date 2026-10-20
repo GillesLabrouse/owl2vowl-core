@@ -31,7 +31,7 @@ public class JsonGenerator {
 	private static final Logger logger = LogManager.getLogger(JsonGenerator.class);
 
 	private final String VERSION_INFORMATION = "Created with OWL2VOWL (version " + ProjectInformations.getVersion()
-			+ "), http://vowl.visualdataweb.org";
+			+ ")";
 	private Map<String, Object> root;
 	private Map<String, Object> header;
 	private Map<String, Object> prefixList;
